@@ -13,7 +13,6 @@ RESPUESTAS_URL = "http://generador-respuestas:5000/procesar"
 METRICAS_URL = "http://almacenamiento-metricas:9000/registrar"
 
 def generar_cache_key(data):
-    """Genera la llave: tipo:zona:params [cite: 54, 102, 113]"""
     tipo = data.get('tipo')
     zona = data.get('zona_id')
     conf = data.get('params', {}).get('confidence_min', 0.0)
@@ -21,30 +20,25 @@ def generar_cache_key(data):
 
 @app.route('/consultar', methods=['POST'])
 def consultar():
-    # Inicia el cronómetro para medir la latencia [cite: 42, 181]
-    start_time = time.time()
+    start_time = time.time() 
     
     data = request.json
     cache_key = generar_cache_key(data)
     
-    # 1. Intentar obtener de la caché [cite: 37, 55]
     resultado_cache = cache.get(cache_key)
     
     if resultado_cache:
-        # HIT 
         evento = "HIT"
         fuente = "cache"
         respuesta_final = resultado_cache
     else:
-        # MISS 
         evento = "MISS"
         fuente = "generador_respuestas"
         try:
-            # Delegar al Generador de Respuestas [cite: 39, 49, 64]
             response = requests.post(RESPUESTAS_URL, json=data, timeout=10)
             respuesta_final = response.json()
-            
-            cache.setex(cache_key, 300, str(respuesta_final)) # ttl de 5 min
+
+            cache.setex(cache_key, 300, str(respuesta_final))  #ttl de 5 minutos
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
@@ -58,12 +52,10 @@ def consultar():
     }
     
     try:
-        # Registro paralelo del evento [cite: 65, 80]
         requests.post(METRICAS_URL, json=payload_metrica, timeout=1)
     except:
         print("Error registrando métricas")
 
-    # Retornar respuesta al Generador de Tráfico [cite: 37, 57, 64]
     return jsonify({"fuente": fuente, "data": respuesta_final})
 
 if __name__ == "__main__":

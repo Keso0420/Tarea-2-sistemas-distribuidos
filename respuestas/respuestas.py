@@ -4,8 +4,6 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Áreas precalculadas de las bounding boxes en km2 para Q3 y Q4 [cite: 127, 132]
-# Nota: Estos valores son estimaciones basadas en las coordenadas del enunciado
 AREAS_KM2 = {
     "Z1": 5.8, "Z2": 11.2, "Z3": 18.5, "Z4": 8.4, "Z5": 14.1
 }
@@ -24,7 +22,6 @@ def generar_padding(bytes_objetivo):
 def cargar_y_filtrar_dataset():
     print("Cargando dataset en memoria...")
     try:
-        # IMPORTANTE: En Docker la ruta debe ser la del contenedor, no la de tu Escritorio [cite: 23, 194]
         ruta_csv = 'data/santiagoCSV.gz' 
         df_full = pd.read_csv(ruta_csv, usecols=['latitude', 'longitude', 'area_in_meters', 'confidence']) 
         
@@ -67,7 +64,6 @@ def procesar_consulta():
     if not limites and tipo != "Q4":
         return jsonify({"error": "Zona no válida"}), 400
 
-    # Filtrado base para la mayoría de las consultas
     mask = (
         (df['latitude'] >= limites['lat'][0]) & (df['latitude'] <= limites['lat'][1]) &
         (df['longitude'] >= limites['lon'][0]) & (df['longitude'] <= limites['lon'][1]) &
@@ -76,11 +72,9 @@ def procesar_consulta():
     
     df_zona = df[mask] if mask is not None else None
 
-    # Q1: Conteo [cite: 98]
     if tipo == "Q1":
         resultado = {"count": int(len(df_zona))}
 
-    # Q2: Área promedio y total [cite: 109]
     elif tipo == "Q2":
         resultado = {
             "avg_area": float(df_zona['area_in_meters'].mean()) if not df_zona.empty else 0,
@@ -88,23 +82,19 @@ def procesar_consulta():
             "n": int(len(df_zona))
         }
 
-    # Q3: Densidad por km2 [cite: 122]
     elif tipo == "Q3":
         densidad = calcular_densidad(zona_id, conf_min)
         resultado = {"density": densidad}
 
-    # Q4: Comparación de densidad entre dos zonas [cite: 134, 135]
     elif tipo == "Q4":
         zona_b = data.get('zona_id_b')
         dens_a = calcular_densidad(zona_id, conf_min) 
         dens_b = calcular_densidad(zona_b, conf_min) 
         resultado = {
-            "zone_a": dens_a,
-            "zone_b": dens_b,
+            "zone_a": dens_a, "zone_b": dens_b,
             "winner": zona_id if dens_a > dens_b else zona_b 
         }
 
-    # Q5: Distribución de confianza [cite: 146, 147]
     elif tipo == "Q5":
         bins = data.get('params', {}).get('bins', 5) 
         scores = df_zona['confidence'].tolist() 
@@ -113,28 +103,23 @@ def procesar_consulta():
         dist = []
         for i in range(len(counts)):
             dist.append({
-                "bucket": i,
-                "min": float(edges[i]),
-                "max": float(edges[i+1]),
-                "count": int(counts[i])
+                "bucket": i, "min": float(edges[i]),
+                "max": float(edges[i+1]), "count": int(counts[i])
             }) 
         resultado = {"distribution": dist}
 
-
-    #PAYLOAD para aumentar tamaño de la respuesta y poder llenar la caché
     pesos = {
         "Q1": 50000,    # 50 KB
-        "Q2": 100000,    # 100 KB
-        "Q3": 100000,    # 100 KB
-        "Q4": 50000,   # 50 KB
-        "Q5": 300000    # 300 KB
+        "Q2": 100000,   # 100 KB
+        "Q3": 100000,   # 100 KB
+        "Q4": 50000,    # 50 KB
+        "Q5": 300000    # 300 KB 
     }
 
     peso_adicional = pesos.get(tipo, 100)
     
-    # El resultado final ahora incluye el peso artificial
     resultado_con_peso = {
-        "resultado": resultado, # Los datos reales (Q1, Q2, etc)
+        "resultado": resultado,
         "padding": generar_padding(peso_adicional) 
     }
     
