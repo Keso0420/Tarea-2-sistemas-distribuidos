@@ -1,2 +1,3 @@
 requests
 numpy
+kafka-python-ng==2.2.3
